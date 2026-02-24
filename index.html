@@ -1,35 +1,429 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vòng Quay May Mắn</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vòng Quay May Mắn</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- config.js phải load TRƯỚC index logic -->
+  <script src="config.js"></script>
 </head>
 <body>
-    <div class="main-wrapper">
-        <h1 id="wheel-title"></h1>
-        
-        <div class="wheel-container">
-            <div class="pointer"></div>
-            <canvas id="wheel" width="400" height="400"></canvas>
-        </div>
 
-        <button id="spin-btn">QUAY NGAY</button>
+<!-- ── Confetti canvas (nằm dưới cùng để không block click) ── -->
+<canvas id="confettiCanvas"></canvas>
+
+<div id="app">
+
+  <!-- Header -->
+  <header class="header">
+    <h1 id="mainTitle"></h1>
+    <p class="subtitle" id="mainSubtitle"></p>
+  </header>
+
+  <!-- Wheel -->
+  <section class="wheel-section">
+    <div class="wheel-container" id="wheelContainer">
+      <div class="tick-indicator"></div>
+      <canvas id="wheelCanvas"></canvas>
+      <div class="pointer"></div>
+      <div class="hub" id="hubBtn" title="Nhấn để quay">🎯</div>
     </div>
 
-    <div id="result-modal" class="modal">
-        <div class="modal-content">
-            <h2>🎉 Chúc mừng! 🎉</h2>
-            <p id="result-name">Bạn nhận được...</p>
-            <img id="result-image" src="" alt="Phần thưởng" />
-            <br>
-            <button id="close-modal">Tuyệt vời</button>
-        </div>
-    </div>
+    <button class="spin-btn" id="spinBtn">
+      <span id="spinBtnIcon"></span>
+      <span id="spinBtnText"></span>
+    </button>
+  </section>
 
-    <script src="config.js"></script>
-    <script src="script.js"></script>
+  <!-- Lịch sử kết quả -->
+  <section class="history-section" id="historySection" style="display:none">
+    <p class="history-title">Kết quả gần đây</p>
+    <div class="history-list" id="historyList"></div>
+  </section>
+
+</div>
+
+<!-- Result Popup -->
+<div class="popup-overlay" id="popupOverlay">
+  <div class="popup-card">
+    <div id="popupVisual"></div>
+    <div class="popup-label" id="popupLabel"></div>
+    <p class="popup-message" id="popupMessage"></p>
+    <button class="popup-close-btn" id="popupCloseBtn"></button>
+  </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   LUCKY WHEEL ENGINE — index.html (inline JS)
+   Đọc dữ liệu từ WHEEL_CONFIG (config.js)
+   ════════════════════════════════════════════════════════════ */
+
+(function () {
+  "use strict";
+
+  /* ── Aliases ─────────────────────────────────────────── */
+  const C = WHEEL_CONFIG;
+  const $ = id => document.getElementById(id);
+
+  /* ── Apply theme CSS vars ────────────────────────────── */
+  const root = document.documentElement;
+  if (C.theme) {
+    if (C.theme.background)   document.body.style.background = C.theme.background;
+    if (C.theme.accentColor)  root.style.setProperty('--accent', C.theme.accentColor);
+    if (C.theme.glowColor)    root.style.setProperty('--glow', C.theme.glowColor);
+    if (C.theme.fontFamily) {
+      root.style.setProperty('--font', C.theme.fontFamily);
+      document.body.style.fontFamily = C.theme.fontFamily;
+    }
+  }
+
+  /* ── Apply text from config ──────────────────────────── */
+  $('mainTitle').textContent        = C.title    || 'Vòng Quay May Mắn';
+  $('mainSubtitle').textContent     = C.subtitle || '';
+  $('spinBtnIcon').textContent      = (C.spinButtonIcon || '') + ' ';
+  $('spinBtnText').textContent      = C.spinButtonText || 'QUAY NGAY';
+  $('popupCloseBtn').textContent    = C.popup?.closeButtonText || 'Nhận Thưởng 🎁';
+
+  /* ── Build weighted segment pool ─────────────────────── */
+  // Chỉ những segment có weight > 0 mới được rút thăm
+  const validSegments = C.segments.filter(s => (s.weight || 0) > 0);
+  const totalWeight   = validSegments.reduce((a, s) => a + s.weight, 0);
+
+  function pickWinner() {
+    let r = Math.random() * totalWeight;
+    for (const seg of validSegments) {
+      r -= seg.weight;
+      if (r <= 0) return seg;
+    }
+    return validSegments[validSegments.length - 1];
+  }
+
+  /* ── Canvas setup ────────────────────────────────────── */
+  const canvas  = $('wheelCanvas');
+  const ctx     = canvas.getContext('2d');
+  const SIZE    = 680; // internal resolution
+  canvas.width  = SIZE;
+  canvas.height = SIZE;
+  const R = SIZE / 2;
+
+  const SEGS     = C.segments;
+  const N        = SEGS.length;
+  const ARC      = (2 * Math.PI) / N;
+
+  /* Pre-load images */
+  const imgCache = {};
+  SEGS.forEach(seg => {
+    if (seg.image) {
+      const img = new Image();
+      img.src = seg.image;
+      img.onload = () => { imgCache[seg.id] = img; drawWheel(currentAngle); };
+      imgCache[seg.id] = img;
+    }
+  });
+
+  /* ── Draw ────────────────────────────────────────────── */
+  let currentAngle = -Math.PI / 2; // start so first segment top-center
+
+  function drawWheel(rotation) {
+    ctx.clearRect(0, 0, SIZE, SIZE);
+    ctx.save();
+    ctx.translate(R, R);
+    ctx.rotate(rotation);
+
+    SEGS.forEach((seg, i) => {
+      const start = i * ARC;
+      const end   = start + ARC;
+      const mid   = start + ARC / 2;
+
+      // Segment fill
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, R - 4, start, end);
+      ctx.closePath();
+      ctx.fillStyle = seg.color || '#888';
+      ctx.fill();
+
+      // Segment border
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, R - 4, start, end);
+      ctx.closePath();
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Decorative outer arc highlight
+      ctx.beginPath();
+      ctx.arc(0, 0, R - 4, start, end);
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      // Text / image
+      ctx.save();
+      ctx.rotate(mid);
+
+      const textR  = R * 0.62;
+      const imgSeg = imgCache[seg.id];
+
+      if (imgSeg && imgSeg.complete && imgSeg.naturalWidth) {
+        // Draw image
+        const imgSize = R * 0.22;
+        ctx.drawImage(imgSeg, textR - imgSize / 2, -imgSize / 2, imgSize, imgSize);
+        // Label below image
+        ctx.translate(textR + imgSize * 0.7, 0);
+      } else {
+        // Emoji
+        if (seg.emoji) {
+          ctx.font = `${R * 0.1}px serif`;
+          ctx.textAlign    = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(seg.emoji, textR - R * 0.07, -R * 0.06);
+        }
+        ctx.translate(textR + R * 0.04, 0);
+      }
+
+      // Main label
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle    = seg.textColor || '#fff';
+
+      const fontSize = Math.max(14, Math.min(28, R * 0.09));
+      ctx.font = `900 ${fontSize}px ${C.theme?.fontFamily || 'Baloo 2, sans-serif'}`;
+      ctx.shadowColor  = 'rgba(0,0,0,0.5)';
+      ctx.shadowBlur   = 4;
+      ctx.fillText(seg.label || '', 0, seg.sublabel ? -fontSize * 0.6 : 0);
+
+      // Sublabel
+      if (seg.sublabel) {
+        const subSize = Math.max(10, fontSize * 0.6);
+        ctx.font = `600 ${subSize}px ${C.theme?.fontFamily || 'Baloo 2, sans-serif'}`;
+        ctx.fillStyle = seg.textColor ? seg.textColor + 'cc' : 'rgba(255,255,255,0.8)';
+        ctx.fillText(seg.sublabel, 0, fontSize * 0.7);
+      }
+
+      ctx.restore();
+    });
+
+    // Center hole
+    ctx.beginPath();
+    ctx.arc(0, 0, R * 0.09, 0, Math.PI * 2);
+    ctx.fillStyle   = '#1a0a2e';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,215,0,0.6)';
+    ctx.lineWidth   = 3;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  drawWheel(currentAngle);
+
+  /* ── Spin logic ──────────────────────────────────────── */
+  let isSpinning = false;
+  let spinStart, spinDuration, spinExtra, winner, spinStartAngle;
+  let audioSpin, audioWin;
+
+  if (C.soundSpin) { audioSpin = new Audio(C.soundSpin); audioSpin.loop = true; }
+  if (C.soundWin)  { audioWin  = new Audio(C.soundWin); }
+
+  function startSpin() {
+    if (isSpinning || validSegments.length === 0) return;
+
+    winner = pickWinner();
+
+    // Calculate target angle: align winner segment to pointer (right side, 0°)
+    const winnerIndex  = SEGS.indexOf(winner);
+    // pointer is at RIGHT side (0°), wheel starts at -π/2
+    // We want the center of winner segment to face right = 0°
+    const segCenter    = winnerIndex * ARC + ARC / 2;
+    // Current normalized angle
+    const norm         = ((currentAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+    // Target rotation (pointer at right = 0, so we want -segCenter at 0 after rotation)
+    const targetNorm   = (2 * Math.PI - segCenter) % (2 * Math.PI);
+    let   delta        = (targetNorm - norm + 2 * Math.PI) % (2 * Math.PI);
+    if (delta < 0.01) delta += 2 * Math.PI;
+
+    const minRotations = (C.minSpins || 5) * 2 * Math.PI;
+    spinExtra          = minRotations + delta;
+    spinDuration       = C.spinDuration || 5000;
+    spinStartAngle     = currentAngle;
+    spinStart          = null;
+
+    isSpinning = true;
+    $('spinBtn').disabled = true;
+    $('hubBtn').style.pointerEvents = 'none';
+
+    if (audioSpin) { audioSpin.currentTime = 0; audioSpin.play().catch(()=>{}); }
+
+    requestAnimationFrame(animateSpin);
+  }
+
+  function easeOut(t) {
+    // Smooth deceleration
+    return 1 - Math.pow(1 - t, 4);
+  }
+
+  function animateSpin(timestamp) {
+    if (!spinStart) spinStart = timestamp;
+    const elapsed  = timestamp - spinStart;
+    const progress = Math.min(elapsed / spinDuration, 1);
+    const eased    = easeOut(progress);
+
+    currentAngle = spinStartAngle + spinExtra * eased;
+    drawWheel(currentAngle);
+
+    if (progress < 1) {
+      requestAnimationFrame(animateSpin);
+    } else {
+      finishSpin();
+    }
+  }
+
+  function finishSpin() {
+    isSpinning = false;
+    $('spinBtn').disabled = false;
+    $('hubBtn').style.pointerEvents = '';
+
+    if (audioSpin) audioSpin.pause();
+    if (audioWin)  { audioWin.currentTime = 0; audioWin.play().catch(()=>{}); }
+
+    addHistory(winner);
+    showPopup(winner);
+  }
+
+  /* ── History ─────────────────────────────────────────── */
+  const MAX_HISTORY = 8;
+  const historyData = [];
+
+  function addHistory(seg) {
+    historyData.unshift(seg);
+    if (historyData.length > MAX_HISTORY) historyData.pop();
+    renderHistory();
+  }
+
+  function renderHistory() {
+    const section = $('historySection');
+    const list    = $('historyList');
+    section.style.display = '';
+    list.innerHTML = '';
+    historyData.forEach(seg => {
+      const el = document.createElement('span');
+      el.className = 'history-item';
+      el.style.borderColor = seg.color + '80';
+      el.style.color = '#fff';
+      el.textContent = (seg.emoji || '') + ' ' + seg.label;
+      list.appendChild(el);
+    });
+  }
+
+  /* ── Popup ───────────────────────────────────────────── */
+  function showPopup(seg) {
+    const visual  = $('popupVisual');
+    const imgSeg  = imgCache[seg.id];
+
+    if (imgSeg && imgSeg.complete && imgSeg.naturalWidth) {
+      visual.innerHTML = `<img class="popup-reward-image" src="${seg.image}" alt="${seg.label}" />`;
+    } else {
+      visual.innerHTML = `<div class="popup-emoji">${seg.emoji || '🎁'}</div>`;
+    }
+
+    $('popupLabel').textContent   = seg.label || '';
+    $('popupMessage').textContent = seg.message || '🎉 Chúc mừng!';
+
+    $('popupOverlay').classList.add('active');
+
+    if (C.popup?.showConfetti) launchConfetti();
+
+    // Auto-close
+    if (C.popup?.autoCloseAfter > 0) {
+      setTimeout(closePopup, C.popup.autoCloseAfter);
+    }
+  }
+
+  function closePopup() {
+    $('popupOverlay').classList.remove('active');
+    stopConfetti();
+  }
+
+  $('popupCloseBtn').addEventListener('click', closePopup);
+  $('popupOverlay').addEventListener('click', e => {
+    if (e.target === $('popupOverlay')) closePopup();
+  });
+
+  /* ── Spin triggers ───────────────────────────────────── */
+  $('spinBtn').addEventListener('click', startSpin);
+  $('hubBtn').addEventListener('click', startSpin);
+
+  /* ── Confetti ────────────────────────────────────────── */
+  const confCanvas = $('confettiCanvas');
+  const confCtx    = confCanvas.getContext('2d');
+  let   confParts  = [];
+  let   confAnim   = null;
+  let   confActive = false;
+
+  function resizeConf() {
+    confCanvas.width  = window.innerWidth;
+    confCanvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resizeConf);
+  resizeConf();
+
+  function launchConfetti() {
+    confActive = true;
+    confParts  = Array.from({ length: 120 }, () => ({
+      x: Math.random() * confCanvas.width,
+      y: confCanvas.height * Math.random() * -0.3 - 20,
+      vx: (Math.random() - 0.5) * 5,
+      vy: Math.random() * 4 + 2,
+      size: Math.random() * 9 + 5,
+      color: ['#FFD700','#FF6B6B','#6BCB77','#4D96FF','#C77DFF','#FFB347','#fff'][Math.floor(Math.random()*7)],
+      rot: Math.random() * 360,
+      rotV: (Math.random() - 0.5) * 8,
+      shape: Math.random() < 0.5 ? 'rect' : 'circle',
+    }));
+    if (confAnim) cancelAnimationFrame(confAnim);
+    animateConf();
+  }
+
+  function animateConf() {
+    if (!confActive) return;
+    confCtx.clearRect(0, 0, confCanvas.width, confCanvas.height);
+    confParts.forEach(p => {
+      p.x   += p.vx;
+      p.y   += p.vy;
+      p.vy  += 0.1;
+      p.rot += p.rotV;
+      confCtx.save();
+      confCtx.translate(p.x, p.y);
+      confCtx.rotate(p.rot * Math.PI / 180);
+      confCtx.fillStyle = p.color;
+      if (p.shape === 'rect') {
+        confCtx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+      } else {
+        confCtx.beginPath();
+        confCtx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+        confCtx.fill();
+      }
+      confCtx.restore();
+    });
+    confParts = confParts.filter(p => p.y < confCanvas.height + 30);
+    if (confParts.length > 0) {
+      confAnim = requestAnimationFrame(animateConf);
+    } else {
+      stopConfetti();
+    }
+  }
+
+  function stopConfetti() {
+    confActive = false;
+    if (confAnim) cancelAnimationFrame(confAnim);
+    confCtx.clearRect(0, 0, confCanvas.width, confCanvas.height);
+  }
+
+})();
+</script>
 </body>
 </html>

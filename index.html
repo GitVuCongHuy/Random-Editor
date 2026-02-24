@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vòng Quay May Mắn</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="wheel-container">
+        <div class="pointer">▼</div>
+        <canvas id="wheel" width="400" height="400"></canvas>
+        <button id="spin-btn">QUAY NGAY</button>
+    </div>
+
+    <div id="result-modal" class="modal">
+        <div class="modal-content">
+            <h2>Chúc mừng!</h2>
+            <p id="result-name">Bạn nhận được...</p>
+            <img id="result-image" src="" alt="Phần thưởng" />
+            <br>
+            <button id="close-modal">Đóng</button>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

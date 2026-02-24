@@ -1,16 +1,36 @@
 body {
-    font-family: Arial, sans-serif;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     display: flex;
     justify-content: center;
     align-items: center;
     height: 100vh;
     margin: 0;
-    background-color: #fce4ec; /* Nền màu hồng nhạt */
+    background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+    overflow: hidden;
+}
+
+.main-wrapper {
+    text-align: center;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 30px;
+    border-radius: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
+}
+
+#wheel-title {
+    color: #fff;
+    font-size: 32px;
+    text-transform: uppercase;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    margin-top: 0;
+    margin-bottom: 30px;
 }
 
 .wheel-container {
     position: relative;
-    text-align: center;
+    display: inline-flex; 
+    justify-content: center;
 }
 
 .pointer {
@@ -18,47 +38,62 @@ body {
     top: -20px;
     left: 50%;
     transform: translateX(-50%);
-    font-size: 40px;
-    color: #c0392b;
+    width: 0; 
+    height: 0; 
+    border-left: 20px solid transparent;
+    border-right: 20px solid transparent;
+    border-top: 35px solid #e74c3c;
     z-index: 10;
+    filter: drop-shadow(0 4px 4px rgba(0,0,0,0.4));
 }
 
 #wheel {
     border-radius: 50%;
-    border: 5px solid #fff;
-    box-shadow: 0 0 15px rgba(0,0,0,0.2);
-    /* Transition được điều khiển bằng JS để quay mượt */
+    border: 8px solid #fff;
+    box-shadow: 0 0 20px rgba(0,0,0,0.3);
 }
 
 #spin-btn {
-    margin-top: 20px;
-    padding: 12px 30px;
-    font-size: 18px;
-    font-weight: bold;
+    display: block;
+    margin: 30px auto 0 auto;
+    padding: 15px 40px;
+    font-size: 22px;
+    font-weight: 900;
     color: white;
-    background-color: #e74c3c;
-    border: none;
-    border-radius: 25px;
+    background: linear-gradient(45deg, #e74c3c, #c0392b);
+    border: 3px solid #fff;
+    border-radius: 50px;
     cursor: pointer;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    transition: background 0.2s;
+    box-shadow: 0 6px 15px rgba(231, 76, 60, 0.4);
+    transition: all 0.2s;
+    animation: pulse 2s infinite;
 }
 
 #spin-btn:hover {
-    background-color: #c0392b;
+    transform: scale(1.05);
+    background: linear-gradient(45deg, #c0392b, #a53125);
 }
 
 #spin-btn:disabled {
-    background-color: #7f8c8d;
+    background: #95a5a6;
+    border-color: #7f8c8d;
     cursor: not-allowed;
+    animation: none;
+    transform: none;
+    box-shadow: none;
 }
 
-/* Giao diện Popup thông báo */
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+    70% { box-shadow: 0 0 0 15px rgba(231, 76, 60, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+}
+
 .modal {
     display: none;
     position: fixed;
     top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.6);
+    background: rgba(0,0,0,0.7);
     justify-content: center;
     align-items: center;
     z-index: 20;
@@ -66,29 +101,32 @@ body {
 
 .modal-content {
     background: white;
-    padding: 30px;
-    border-radius: 10px;
+    padding: 40px;
+    border-radius: 15px;
     text-align: center;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-    animation: popIn 0.3s ease-out;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.modal-content img {
-    max-width: 150px;
-    margin: 15px 0;
-    border-radius: 8px;
-}
+.modal-content h2 { color: #e74c3c; margin-top: 0; }
+.modal-content p { font-size: 20px; font-weight: bold; }
+.modal-content img { max-width: 120px; margin: 15px 0; }
 
 #close-modal {
-    padding: 8px 20px;
-    background: #3498db;
+    padding: 10px 30px;
+    font-size: 16px;
+    background: #2ecc71;
     color: white;
     border: none;
-    border-radius: 5px;
+    border-radius: 25px;
     cursor: pointer;
+    font-weight: bold;
+    transition: background 0.2s;
 }
 
+#close-modal:hover { background: #27ae60; }
+
 @keyframes popIn {
-    from { transform: scale(0.8); opacity: 0; }
+    from { transform: scale(0.5); opacity: 0; }
     to { transform: scale(1); opacity: 1; }
 }

@@ -5,21 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vòng Quay May Mắn</title>
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 </head>
 <body>
-    <div class="wheel-container">
-        <div class="pointer">▼</div>
-        <canvas id="wheel" width="400" height="400"></canvas>
+    <div class="main-wrapper">
+        <h1 id="wheel-title"></h1>
+        
+        <div class="wheel-container">
+            <div class="pointer"></div>
+            <canvas id="wheel" width="400" height="400"></canvas>
+        </div>
+
         <button id="spin-btn">QUAY NGAY</button>
     </div>
 
     <div id="result-modal" class="modal">
         <div class="modal-content">
-            <h2>Chúc mừng!</h2>
+            <h2>🎉 Chúc mừng! 🎉</h2>
             <p id="result-name">Bạn nhận được...</p>
             <img id="result-image" src="" alt="Phần thưởng" />
             <br>
-            <button id="close-modal">Đóng</button>
+            <button id="close-modal">Tuyệt vời</button>
         </div>
     </div>
 
